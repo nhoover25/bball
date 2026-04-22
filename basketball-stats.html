@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<title>Basketball Stats</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #111; font-size: 14px; }
+  #app { padding: 10px; max-width: 100vw; overflow-x: hidden; }
+
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 6px; background: #fff; border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .clock-block { display: flex; flex-direction: column; }
+  .clock-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+  .game-clock { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; color: #111; }
+  .top-right { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+  button { font-family: inherit; cursor: pointer; border: none; border-radius: 8px; font-size: 12px; padding: 7px 11px; font-weight: 500; transition: opacity 0.1s, transform 0.1s; }
+  button:active { transform: scale(0.96); opacity: 0.85; }
+  .btn-start  { background: #1a6b3c; color: #fff; }
+  .btn-stop   { background: #a32d2d; color: #fff; }
+  .btn-end    { background: #7f5a00; color: #fff; }
+  .btn-undo   { background: #e8e8e8; color: #333; }
+  .btn-reset  { background: #e8e8e8; color: #333; }
+  .btn-cancel { background: #e8e8e8; color: #333; }
+  .btn-danger { background: #a32d2d; color: #fff; }
+  button:disabled { opacity: 0.35; }
+
+  .confirm-bar { display: none; background: #fff8e6; border: 1px solid #e6b800; border-radius: 10px; padding: 9px 12px; margin-bottom: 10px; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .confirm-bar.show { display: flex; }
+  .confirm-bar span { flex: 1; font-size: 13px; }
+
+  .add-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .add-row input { flex: 1; height: 38px; padding: 0 12px; border: 1px solid #ddd; border-radius: 8px; background: #fff; color: #111; font-size: 14px; font-family: inherit; outline: none; }
+  .add-row input:focus { border-color: #1a6b3c; }
+  .add-row button { height: 38px; padding: 0 14px; background: #1a6b3c; color: #fff; border-radius: 8px; font-size: 13px; }
+
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  table { border-collapse: collapse; min-width: 100%; font-size: 12px; }
+
+  thead th { background: #f0f0f0; font-size: 10px; font-weight: 600; color: #666; padding: 6px 4px; text-align: center; border-bottom: 1px solid #e0e0e0; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
+  thead th:first-child { text-align: left; padding-left: 10px; min-width: 95px; position: sticky; left: 0; z-index: 4; background: #f0f0f0; }
+
+  tbody tr { border-bottom: 1px solid #f0f0f0; }
+  tbody tr.active-row { background: #f0faf4; }
+  tbody td { padding: 0; text-align: center; }
+  tbody td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; padding: 6px 4px 6px 10px; min-width: 95px; }
+  tbody tr.active-row td:first-child { background: #f0faf4; }
+
+  .name-cell { display: flex; align-items: center; gap: 6px; }
+  .in-checkbox { width: 18px; height: 18px; accent-color: #1a6b3c; cursor: pointer; flex-shrink: 0; }
+  .name-text { font-size: 12px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px; }
+  .time-cell { font-size: 10px; color: #888; font-variant-numeric: tabular-nums; padding-top: 1px; }
+
+  .stat-cell { cursor: pointer; user-select: none; padding: 10px 5px; min-width: 36px; }
+  .stat-cell:active { background: #e8e8e8; }
+  .stat-val { font-size: 16px; font-weight: 600; color: #111; line-height: 1; }
+  .stat-note { font-size: 9px; color: #aaa; margin-top: 2px; }
+
+  .pts-cell { background: #f5f5f5; font-size: 16px; font-weight: 700; color: #1a6b3c; padding: 10px 6px; }
+
+  tfoot td { padding: 7px 5px; font-size: 12px; font-weight: 600; color: #111; text-align: center; border-top: 2px solid #ddd; background: #f5f5f5; }
+  tfoot td:first-child { text-align: left; padding-left: 10px; position: sticky; left: 0; background: #f5f5f5; }
+  tfoot .pts-cell { color: #1a6b3c; }
+
+  .no-players { color: #aaa; font-size: 13px; text-align: center; padding: 32px 16px; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+  #summaryScreen { display: none; }
+  .summary-header { text-align: center; margin-bottom: 16px; background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .summary-header h2 { font-size: 20px; font-weight: 700; color: #111; }
+  .summary-header p { font-size: 13px; color: #888; margin-top: 4px; }
+  .summary-section { margin-bottom: 14px; }
+  .summary-section h3 { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+  .leader-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .leader-card { background: #fff; border-radius: 10px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .leader-label { font-size: 10px; color: #888; margin-bottom: 3px; }
+  .leader-name { font-size: 14px; font-weight: 600; color: #111; }
+  .leader-val { font-size: 12px; color: #1a6b3c; font-weight: 500; margin-top: 1px; }
+  .summary-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .summary-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .summary-table th { font-weight: 600; color: #666; padding: 6px 5px; text-align: center; font-size: 10px; background: #f0f0f0; border-bottom: 1px solid #e0e0e0; white-space: nowrap; }
+  .summary-table th:first-child { text-align: left; padding-left: 10px; }
+  .summary-table td { padding: 8px 5px; text-align: center; border-bottom: 1px solid #f0f0f0; color: #111; }
+  .summary-table td:first-child { text-align: left; font-weight: 600; padding-left: 10px; }
+  .summary-table .tot-row td { font-weight: 700; background: #f5f5f5; border-top: 2px solid #ddd; }
+  .highlight { color: #1a6b3c; font-weight: 700; }
+  .btn-new-game { display: block; width: 100%; margin-top: 10px; padding: 14px; background: #1a6b3c; color: #fff; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: center; cursor: pointer; border: none; font-family: inherit; }
+  .btn-csv { display: block; width: 100%; margin-top: 10px; padding: 14px; background: #1a4a7f; color: #fff; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: center; cursor: pointer; border: none; font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="gameScreen">
+    <div class="top-bar">
+      <div class="clock-block">
+        <span class="clock-label">Game Clock</span>
+        <span class="game-clock" id="gameClock">00:00</span>
+      </div>
+      <div class="top-right">
+        <button class="btn-undo" id="undoBtn" onclick="globalUndo()" disabled>↩ Undo</button>
+        <button class="btn-start" id="clockBtn" onclick="toggleClock()">Start</button>
+        <button class="btn-end" id="endBtn" onclick="promptEndGame()" disabled>End Game</button>
+        <button class="btn-reset" onclick="promptReset()">Reset</button>
+      </div>
+    </div>
+
+    <div class="confirm-bar" id="endConfirm">
+      <span>End the game and show final stats?</span>
+      <button class="btn-danger" onclick="endGame()">Yes, end game</button>
+      <button class="btn-cancel" onclick="dismissConfirm('endConfirm')">Cancel</button>
+    </div>
+    <div class="confirm-bar" id="resetConfirm">
+      <span>Reset all stats and clock?</span>
+      <button class="btn-danger" onclick="resetAll()">Yes, reset</button>
+      <button class="btn-cancel" onclick="dismissConfirm('resetConfirm')">Cancel</button>
+    </div>
+
+    <div class="add-row">
+      <input type="text" id="nameInput" placeholder="Add player" maxlength="18" onkeydown="if(event.key==='Enter')addPlayer()" />
+      <button onclick="addPlayer()">+ Add</button>
+    </div>
+
+    <div id="tableArea"></div>
+    <div class="no-players" id="emptyMsg" style="display:none">Add players to get started</div>
+  </div>
+
+  <div id="summaryScreen"></div>
+</div>
+
+<script>
+let gameRunning = false, gameStarted = false, gameStart = null, gameElapsed = 0, clockInterval = null;
+let players = [], history = [];
+
+const COLS = [
+  { key:'fg',    label:'FG',         note:'→+FGA' },
+  { key:'fga',   label:'FGA\nmiss',   note:'miss only' },
+  { key:'3pt',   label:'3PT',         note:'→+3A' },
+  { key:'3pta',  label:'3PTA\nmiss',  note:'miss only' },
+  { key:'ft',    label:'FT',          note:'→+FTA' },
+  { key:'fta',   label:'FTA\nmiss',   note:'miss only' },
+  { key:'orb',   label:'OReb',        note:'' },
+  { key:'drb',   label:'DReb',        note:'' },
+  { key:'ast',   label:'Ast',         note:'' },
+  { key:'stl',   label:'Stl',         note:'' },
+  { key:'to',    label:'TO',          note:'' },
+];
+
+const PRELOAD = ['Alex','Alli','Dylan','Ella','Harper','Lillia','Madelyn','Rilynn','Ryan','Victoria'];
+
+function newStats() {
+  return { fg:0, fga:0, '3pt':0, '3pta':0, ft:0, fta:0, orb:0, drb:0, ast:0, stl:0, to:0 };
+}
+function calcPts(s) { return s.fg * 2 + s['3pt'] * 3 + s.ft; }
+function totalFor(key) { return players.reduce((s,p) => s + (p.stats[key]||0), 0); }
+function fmt(ms) {
+  const s = Math.floor(ms/1000), m = Math.floor(s/60);
+  return String(m).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+}
+function pct(made, att) { return att > 0 ? Math.round(made/att*100)+'%' : '—'; }
+
+PRELOAD.forEach(name => {
+  players.push({ id: Date.now() + Math.random(), name, inGame: false, timeStart: null, timeElapsed: 0, stats: newStats() });
+});
+
+function promptEndGame() {
+  dismissConfirm('resetConfirm');
+  document.getElementById('endConfirm').classList.toggle('show');
+}
+function promptReset() {
+  dismissConfirm('endConfirm');
+  document.getElementById('resetConfirm').classList.toggle('show');
+}
+function dismissConfirm(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+function toggleClock() {
+  dismissConfirm('endConfirm'); dismissConfirm('resetConfirm');
+  if (!gameRunning) {
+    gameRunning = true; gameStarted = true;
+    gameStart = Date.now() - gameElapsed;
+    clockInterval = setInterval(tickClock, 1000);
+    document.getElementById('clockBtn').textContent = 'Pause';
+    document.getElementById('clockBtn').className = 'btn-stop';
+    document.getElementById('endBtn').disabled = false;
+    players.forEach(p => { if (p.inGame) p.timeStart = Date.now(); });
+  } else {
+    gameRunning = false;
+    gameElapsed = Date.now() - gameStart;
+    clearInterval(clockInterval);
+    document.getElementById('clockBtn').textContent = 'Resume';
+    document.getElementById('clockBtn').className = 'btn-start';
+    players.forEach(p => {
+      if (p.inGame && p.timeStart) { p.timeElapsed += Date.now() - p.timeStart; p.timeStart = null; }
+    });
+    renderTable();
+  }
+}
+
+function tickClock() {
+  gameElapsed = Date.now() - gameStart;
+  document.getElementById('gameClock').textContent = fmt(gameElapsed);
+  players.forEach(p => {
+    if (p.inGame && p.timeStart) {
+      const el = document.getElementById('time-' + p.id);
+      if (el) el.textContent = fmt(p.timeElapsed + Date.now() - p.timeStart);
+    }
+  });
+}
+
+function addPlayer() {
+  const inp = document.getElementById('nameInput');
+  const name = inp.value.trim();
+  if (!name) return;
+  players.push({ id: Date.now(), name, inGame: false, timeStart: null, timeElapsed: 0, stats: newStats() });
+  inp.value = '';
+  renderTable();
+}
+
+function toggleIn(id) {
+  const p = players.find(x => x.id === id);
+  if (!p) return;
+  if (!p.inGame) {
+    p.inGame = true;
+    if (gameRunning) p.timeStart = Date.now();
+  } else {
+    p.inGame = false;
+    if (p.timeStart) { p.timeElapsed += Date.now() - p.timeStart; p.timeStart = null; }
+  }
+  renderTable();
+}
+
+function tapStat(id, key) {
+  const p = players.find(x => x.id === id);
+  if (!p) return;
+  const entry = { id, key, delta:1, also:[] };
+  p.stats[key]++;
+  if (key==='fg')  { p.stats.fga++;     entry.also.push({key:'fga',  delta:1}); }
+  if (key==='3pt') { p.stats['3pta']++; entry.also.push({key:'3pta', delta:1}); }
+  if (key==='ft')  { p.stats.fta++;     entry.also.push({key:'fta',  delta:1}); }
+  history.push(entry);
+  updateUndoBtn();
+  refreshRow(p);
+}
+
+function globalUndo() {
+  if (!history.length) return;
+  const entry = history.pop();
+  const p = players.find(x => x.id === entry.id);
+  if (!p) { updateUndoBtn(); return; }
+  if (p.stats[entry.key] > 0) p.stats[entry.key] -= entry.delta;
+  entry.also.forEach(a => { if (p.stats[a.key] > 0) p.stats[a.key] -= a.delta; });
+  updateUndoBtn();
+  refreshRow(p);
+}
+
+function updateUndoBtn() {
+  const btn = document.getElementById('undoBtn');
+  if (!btn) return;
+  btn.disabled = !history.length;
+}
+
+function endGame() {
+  dismissConfirm('endConfirm');
+  if (gameRunning) {
+    gameRunning = false;
+    gameElapsed = Date.now() - gameStart;
+    clearInterval(clockInterval);
+  }
+  players.forEach(p => {
+    if (p.inGame && p.timeStart) { p.timeElapsed += Date.now() - p.timeStart; p.timeStart = null; }
+    p.inGame = false;
+  });
+  downloadCSV();
+  showSummary();
+}
+
+function downloadCSV() {
+  const date = new Date().toLocaleDateString('en-US', {month:'2-digit',day:'2-digit',year:'numeric'}).replace(/\//g,'-');
+  const headers = ['Player','Time','FG','FGA','FG%','3PT','3PTA','3PT%','FT','FTA','FT%','OReb','DReb','Reb','Ast','Stl','TO','PTS'];
+  const rows = players.map(p => {
+    const fgAtt = p.stats.fg  + p.stats.fga;
+    const tpAtt = p.stats['3pt'] + p.stats['3pta'];
+    const ftAtt = p.stats.ft  + p.stats.fta;
+    return [
+      p.name,
+      fmt(p.timeElapsed),
+      p.stats.fg, fgAtt, pct(p.stats.fg, fgAtt),
+      p.stats['3pt'], tpAtt, pct(p.stats['3pt'], tpAtt),
+      p.stats.ft, ftAtt, pct(p.stats.ft, ftAtt),
+      p.stats.orb, p.stats.drb, p.stats.orb + p.stats.drb,
+      p.stats.ast, p.stats.stl, p.stats.to,
+      calcPts(p.stats)
+    ].join(',');
+  });
+
+  const tFG  = totalFor('fg'),  tFGA = totalFor('fg') + totalFor('fga');
+  const t3   = totalFor('3pt'), t3A  = totalFor('3pt') + totalFor('3pta');
+  const tFT  = totalFor('ft'),  tFTA = totalFor('ft') + totalFor('fta');
+  const tORB = totalFor('orb'), tDRB = totalFor('drb');
+  const tPTS = players.reduce((s,p) => s + calcPts(p.stats), 0);
+  const totRow = [
+    'TEAM TOTALS', fmt(gameElapsed),
+    tFG, tFGA, pct(tFG,tFGA),
+    t3,  t3A,  pct(t3,t3A),
+    tFT, tFTA, pct(tFT,tFTA),
+    tORB, tDRB, tORB+tDRB,
+    totalFor('ast'), totalFor('stl'), totalFor('to'), tPTS
+  ].join(',');
+
+  const csv  = [headers.join(','), ...rows, totRow].join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'basketball-stats-' + date + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function showSummary() {
+  document.getElementById('gameScreen').style.display = 'none';
+  const screen = document.getElementById('summaryScreen');
+  screen.style.display = 'block';
+
+  const totalPts = players.reduce((s,p) => s + calcPts(p.stats), 0);
+  const tFG  = totalFor('fg'),  tFGA = totalFor('fg') + totalFor('fga');
+  const t3   = totalFor('3pt'), t3A  = totalFor('3pt') + totalFor('3pta');
+  const tFT  = totalFor('ft'),  tFTA = totalFor('ft') + totalFor('fta');
+  const tORB = totalFor('orb'), tDRB = totalFor('drb');
+  const tAST = totalFor('ast'), tSTL = totalFor('stl'), tTO = totalFor('to');
+
+  function leader(fn) {
+    let best = null, bestVal = -1;
+    players.forEach(p => { const v = fn(p); if (v > bestVal) { bestVal = v; best = p; } });
+    return best ? { name: best.name, val: bestVal } : { name: '—', val: 0 };
+  }
+  const lPts = leader(p => calcPts(p.stats));
+  const lReb = leader(p => p.stats.orb + p.stats.drb);
+  const lAst = leader(p => p.stats.ast);
+  const lStl = leader(p => p.stats.stl);
+
+  const playerRows = players.map(p => {
+    const fgAtt = p.stats.fg + p.stats.fga;
+    const tpAtt = p.stats['3pt'] + p.stats['3pta'];
+    const ftAtt = p.stats.ft + p.stats.fta;
+    return `<tr>
+      <td>${p.name}</td>
+      <td>${fmt(p.timeElapsed)}</td>
+      <td>${p.stats.fg}/${fgAtt} <span style="color:#aaa;font-size:10px">${pct(p.stats.fg,fgAtt)}</span></td>
+      <td>${p.stats['3pt']}/${tpAtt} <span style="color:#aaa;font-size:10px">${pct(p.stats['3pt'],tpAtt)}</span></td>
+      <td>${p.stats.ft}/${ftAtt} <span style="color:#aaa;font-size:10px">${pct(p.stats.ft,ftAtt)}</span></td>
+      <td>${p.stats.orb + p.stats.drb}</td>
+      <td>${p.stats.ast}</td>
+      <td>${p.stats.stl}</td>
+      <td>${p.stats.to}</td>
+      <td class="highlight">${calcPts(p.stats)}</td>
+    </tr>`;
+  }).join('');
+
+  screen.innerHTML = `
+    <div class="summary-header">
+      <h2>Final Box Score</h2>
+      <p>Game time: ${fmt(gameElapsed)}</p>
+    </div>
+    <div class="summary-section">
+      <h3>Game Leaders</h3>
+      <div class="leader-grid">
+        <div class="leader-card"><div class="leader-label">Points</div><div class="leader-name">${lPts.name}</div><div class="leader-val">${lPts.val} pts</div></div>
+        <div class="leader-card"><div class="leader-label">Rebounds</div><div class="leader-name">${lReb.name}</div><div class="leader-val">${lReb.val} reb</div></div>
+        <div class="leader-card"><div class="leader-label">Assists</div><div class="leader-name">${lAst.name}</div><div class="leader-val">${lAst.val} ast</div></div>
+        <div class="leader-card"><div class="leader-label">Steals</div><div class="leader-name">${lStl.name}</div><div class="leader-val">${lStl.val} stl</div></div>
+      </div>
+    </div>
+    <div class="summary-section">
+      <h3>Player Stats</h3>
+      <div class="summary-table-wrap">
+        <table class="summary-table">
+          <thead><tr><th>Player</th><th>Time</th><th>FG</th><th>3PT</th><th>FT</th><th>Reb</th><th>Ast</th><th>Stl</th><th>TO</th><th>PTS</th></tr></thead>
+          <tbody>${playerRows}</tbody>
+          <tfoot><tr class="tot-row">
+            <td>Team</td>
+            <td>${fmt(gameElapsed)}</td>
+            <td>${tFG}/${tFGA} <span style="font-size:10px;color:#aaa">${pct(tFG,tFGA)}</span></td>
+            <td>${t3}/${t3A} <span style="font-size:10px;color:#aaa">${pct(t3,t3A)}</span></td>
+            <td>${tFT}/${tFTA} <span style="font-size:10px;color:#aaa">${pct(tFT,tFTA)}</span></td>
+            <td>${tORB+tDRB}</td><td>${tAST}</td><td>${tSTL}</td><td>${tTO}</td>
+            <td class="highlight">${totalPts}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>
+    <button class="btn-csv" onclick="downloadCSV()">⬇ Download CSV Again</button>
+    <button class="btn-new-game" onclick="newGame()">Start New Game</button>`;
+}
+
+function newGame() {
+  players = []; history = [];
+  PRELOAD.forEach(name => {
+    players.push({ id: Date.now() + Math.random(), name, inGame: false, timeStart: null, timeElapsed: 0, stats: newStats() });
+  });
+  gameRunning = false; gameStarted = false; gameElapsed = 0;
+  clearInterval(clockInterval);
+  document.getElementById('summaryScreen').style.display = 'none';
+  document.getElementById('gameScreen').style.display = 'block';
+  document.getElementById('gameClock').textContent = '00:00';
+  document.getElementById('clockBtn').textContent = 'Start';
+  document.getElementById('clockBtn').className = 'btn-start';
+  document.getElementById('endBtn').disabled = true;
+  updateUndoBtn();
+  renderTable();
+}
+
+function resetAll() {
+  dismissConfirm('resetConfirm');
+  gameRunning = false; gameStarted = false; gameElapsed = 0; history = [];
+  clearInterval(clockInterval);
+  document.getElementById('gameClock').textContent = '00:00';
+  document.getElementById('clockBtn').textContent = 'Start';
+  document.getElementById('clockBtn').className = 'btn-start';
+  document.getElementById('endBtn').disabled = true;
+  players.forEach(p => { p.inGame = false; p.timeStart = null; p.timeElapsed = 0; p.stats = newStats(); });
+  updateUndoBtn();
+  renderTable();
+}
+
+function refreshRow(p) {
+  const row = document.getElementById('row-' + p.id);
+  if (!row) { renderTable(); return; }
+  row.className = p.inGame ? 'active-row' : '';
+  const cb = row.querySelector('.in-checkbox');
+  if (cb) cb.checked = p.inGame;
+  COLS.forEach(c => {
+    const cell = document.getElementById('stat-' + p.id + '-' + c.key);
+    if (cell) cell.querySelector('.stat-val').textContent = p.stats[c.key];
+  });
+  const ptsEl = document.getElementById('pts-' + p.id);
+  if (ptsEl) ptsEl.textContent = calcPts(p.stats);
+  COLS.forEach(c => { const tf = document.getElementById('tot-' + c.key); if (tf) tf.textContent = totalFor(c.key); });
+  const tpts = document.getElementById('tot-pts');
+  if (tpts) tpts.textContent = players.reduce((s,p) => s + calcPts(p.stats), 0);
+}
+
+function renderTable() {
+  const area  = document.getElementById('tableArea');
+  const empty = document.getElementById('emptyMsg');
+  if (players.length === 0) { area.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  const headers = COLS.map(c => `<th>${c.label.replace('\n','<br>')}</th>`).join('');
+  const rows = players.map(p => {
+    let ms = p.timeElapsed;
+    if (p.inGame && p.timeStart) ms += Date.now() - p.timeStart;
+    const cells = COLS.map(c => `
+      <td class="stat-cell" id="stat-${p.id}-${c.key}" onclick="tapStat(${p.id},'${c.key}')">
+        <div class="stat-val">${p.stats[c.key]}</div>
+        ${c.note ? `<div class="stat-note">${c.note}</div>` : ''}
+      </td>`).join('');
+    return `<tr id="row-${p.id}" class="${p.inGame ? 'active-row' : ''}">
+      <td>
+        <div class="name-cell">
+          <input type="checkbox" class="in-checkbox" ${p.inGame ? 'checked' : ''} onchange="toggleIn(${p.id})" />
+          <span class="name-text" title="${p.name}">${p.name}</span>
+        </div>
+        <div class="time-cell" id="time-${p.id}">${fmt(ms)}</div>
+      </td>
+      ${cells}
+      <td class="pts-cell" id="pts-${p.id}">${calcPts(p.stats)}</td>
+    </tr>`;
+  }).join('');
+  const totCells = COLS.map(c => `<td id="tot-${c.key}">${totalFor(c.key)}</td>`).join('');
+  const totPts   = players.reduce((s,p) => s + calcPts(p.stats), 0);
+  area.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Player</th>${headers}<th>PTS</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td>Totals</td>${totCells}<td class="pts-cell" id="tot-pts">${totPts}</td></tr></tfoot>
+      </table>
+    </div>`;
+}
+
+renderTable();
+</script>
+</body>
+</html>
