@@ -15,6 +15,10 @@
   .clock-block { display: flex; flex-direction: column; }
   .clock-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
   .game-clock { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; color: #111; }
+  .opp-block { display: flex; flex-direction: column; }
+  .opp-input { font-family: inherit; font-size: 14px; font-weight: 500; color: #111; border: none; border-bottom: 1.5px solid #ddd; background: transparent; outline: none; width: 110px; padding: 2px 0; }
+  .opp-input:focus { border-bottom-color: #1a6b3c; }
+  .opp-input::placeholder { color: #bbb; font-weight: 400; }
   .top-right { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
   button { font-family: inherit; cursor: pointer; border: none; border-radius: 8px; font-size: 12px; padding: 7px 11px; font-weight: 500; transition: opacity 0.1s, transform 0.1s; }
@@ -44,10 +48,19 @@
   thead th:first-child { text-align: left; padding-left: 10px; min-width: 95px; position: sticky; left: 0; z-index: 4; background: #f0f0f0; }
 
   tbody tr { border-bottom: 1px solid #f0f0f0; }
-  tbody tr.active-row { background: #f0faf4; }
+  tbody tr.active-row { background: #e8f5ee; }
+  tbody tr.active-row td:first-child { background: #e8f5ee; }
+  tbody tr.bench-row { background: #fafafa; opacity: 0.72; }
+  tbody tr.bench-row td:first-child { background: #fafafa; }
   tbody td { padding: 0; text-align: center; }
   tbody td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; padding: 6px 4px 6px 10px; min-width: 95px; }
-  tbody tr.active-row td:first-child { background: #f0faf4; }
+
+  .name-active { color: #1a6b3c !important; }
+  .bench-stat .stat-val { color: #999; }
+  .bench-pts { background: #f0f0f0 !important; color: #999 !important; }
+
+  .max-alert { display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #a32d2d; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; z-index: 999; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+  .max-alert.show { display: block; }
 
   .name-cell { display: flex; align-items: center; gap: 6px; }
   .in-checkbox { width: 18px; height: 18px; accent-color: #1a6b3c; cursor: pointer; flex-shrink: 0; }
@@ -58,6 +71,13 @@
   .stat-cell:active { background: #e8e8e8; }
   .stat-val { font-size: 16px; font-weight: 600; color: #111; line-height: 1; }
   .stat-note { font-size: 9px; color: #aaa; margin-top: 2px; }
+
+  @media (max-width: 480px) {
+    .stat-note { display: none; }
+    .stat-cell { padding: 12px 5px; }
+    tbody td:first-child { padding-top: 12px; padding-bottom: 12px; }
+    .pts-cell { padding: 12px 6px; }
+  }
 
   .pts-cell { background: #f5f5f5; font-size: 16px; font-weight: 700; color: #1a6b3c; padding: 10px 6px; }
 
@@ -99,6 +119,10 @@
         <span class="clock-label">Game Clock</span>
         <span class="game-clock" id="gameClock">00:00</span>
       </div>
+      <div class="opp-block">
+        <span class="clock-label">Opponent</span>
+        <input class="opp-input" id="oppInput" placeholder="Team name" maxlength="20" />
+      </div>
       <div class="top-right">
         <button class="btn-undo" id="undoBtn" onclick="globalUndo()" disabled>↩ Undo</button>
         <button class="btn-start" id="clockBtn" onclick="toggleClock()">Start</button>
@@ -128,6 +152,7 @@
   </div>
 
   <div id="summaryScreen"></div>
+  <div class="max-alert" id="maxAlert">Only 5 players can be on the court</div>
 </div>
 
 <script>
@@ -135,23 +160,25 @@ let gameRunning = false, gameStarted = false, gameStart = null, gameElapsed = 0,
 let players = [], history = [];
 
 const COLS = [
-  { key:'fg',    label:'FG',         note:'→+FGA' },
-  { key:'fga',   label:'FGA\nmiss',   note:'miss only' },
-  { key:'3pt',   label:'3PT',         note:'→+3A' },
-  { key:'3pta',  label:'3PTA\nmiss',  note:'miss only' },
-  { key:'ft',    label:'FT',          note:'→+FTA' },
-  { key:'fta',   label:'FTA\nmiss',   note:'miss only' },
-  { key:'orb',   label:'OReb',        note:'' },
-  { key:'drb',   label:'DReb',        note:'' },
-  { key:'ast',   label:'Ast',         note:'' },
-  { key:'stl',   label:'Stl',         note:'' },
-  { key:'to',    label:'TO',          note:'' },
+  { key:'fg',    label:'FG',    note:'make' },
+  { key:'fga',   label:'FGA',   note:'miss' },
+  { key:'3pt',   label:'3PT',   note:'make' },
+  { key:'3pta',  label:'3PTA',  note:'miss' },
+  { key:'ft',    label:'FT',    note:'make' },
+  { key:'fta',   label:'FTA',   note:'miss' },
+  { key:'orb',   label:'OReb',  note:'' },
+  { key:'drb',   label:'DReb',  note:'' },
+  { key:'ast',   label:'Ast',   note:'' },
+  { key:'stl',   label:'Stl',   note:'' },
+  { key:'blk',   label:'Blks',  note:'' },
+  { key:'to',    label:'TO',    note:'' },
+  { key:'f',     label:'F',     note:'' },
 ];
 
 const PRELOAD = ['Alex','Alli','Dylan','Ella','Harper','Lillia','Madelyn','Rilynn','Ryan','Victoria'];
 
 function newStats() {
-  return { fg:0, fga:0, '3pt':0, '3pta':0, ft:0, fta:0, orb:0, drb:0, ast:0, stl:0, to:0 };
+  return { fg:0, fga:0, '3pt':0, '3pta':0, ft:0, fta:0, orb:0, drb:0, ast:0, stl:0, blk:0, to:0, f:0 };
 }
 function calcPts(s) { return s.fg * 2 + s['3pt'] * 3 + s.ft; }
 function totalFor(key) { return players.reduce((s,p) => s + (p.stats[key]||0), 0); }
@@ -224,6 +251,13 @@ function toggleIn(id) {
   const p = players.find(x => x.id === id);
   if (!p) return;
   if (!p.inGame) {
+    const inCount = players.filter(x => x.inGame).length;
+    if (inCount >= 5) {
+      const cb = document.querySelector('#row-' + id + ' .in-checkbox');
+      if (cb) cb.checked = false;
+      showMaxAlert();
+      return;
+    }
     p.inGame = true;
     if (gameRunning) p.timeStart = Date.now();
   } else {
@@ -233,14 +267,21 @@ function toggleIn(id) {
   renderTable();
 }
 
+function showMaxAlert() {
+  const el = document.getElementById('maxAlert');
+  el.classList.add('show');
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
 function tapStat(id, key) {
   const p = players.find(x => x.id === id);
   if (!p) return;
   const entry = { id, key, delta:1, also:[] };
   p.stats[key]++;
-  if (key==='fg')  { p.stats.fga++;     entry.also.push({key:'fga',  delta:1}); }
-  if (key==='3pt') { p.stats['3pta']++; entry.also.push({key:'3pta', delta:1}); }
-  if (key==='ft')  { p.stats.fta++;     entry.also.push({key:'fta',  delta:1}); }
+  if (key==='fg')  { entry.also = []; }
+  if (key==='3pt') { entry.also = []; }
+  if (key==='ft')  { entry.also = []; }
   history.push(entry);
   updateUndoBtn();
   refreshRow(p);
@@ -280,7 +321,7 @@ function endGame() {
 
 function downloadCSV() {
   const date = new Date().toLocaleDateString('en-US', {month:'2-digit',day:'2-digit',year:'numeric'}).replace(/\//g,'-');
-  const headers = ['Player','Time','FG','FGA','FG%','3PT','3PTA','3PT%','FT','FTA','FT%','OReb','DReb','Reb','Ast','Stl','TO','PTS'];
+  const headers = ['Player','Time','FG','FGA','FG%','3PT','3PTA','3PT%','FT','FTA','FT%','OReb','DReb','Reb','Ast','Stl','Blks','TO','F','PTS'];
   const rows = players.map(p => {
     const fgAtt = p.stats.fg  + p.stats.fga;
     const tpAtt = p.stats['3pt'] + p.stats['3pta'];
@@ -292,7 +333,7 @@ function downloadCSV() {
       p.stats['3pt'], tpAtt, pct(p.stats['3pt'], tpAtt),
       p.stats.ft, ftAtt, pct(p.stats.ft, ftAtt),
       p.stats.orb, p.stats.drb, p.stats.orb + p.stats.drb,
-      p.stats.ast, p.stats.stl, p.stats.to,
+      p.stats.ast, p.stats.stl, p.stats.blk, p.stats.to, p.stats.f,
       calcPts(p.stats)
     ].join(',');
   });
@@ -308,7 +349,7 @@ function downloadCSV() {
     t3,  t3A,  pct(t3,t3A),
     tFT, tFTA, pct(tFT,tFTA),
     tORB, tDRB, tORB+tDRB,
-    totalFor('ast'), totalFor('stl'), totalFor('to'), tPTS
+    totalFor('ast'), totalFor('stl'), totalFor('blk'), totalFor('to'), totalFor('f'), tPTS
   ].join(',');
 
   const csv  = [headers.join(','), ...rows, totRow].join('\n');
@@ -333,7 +374,7 @@ function showSummary() {
   const t3   = totalFor('3pt'), t3A  = totalFor('3pt') + totalFor('3pta');
   const tFT  = totalFor('ft'),  tFTA = totalFor('ft') + totalFor('fta');
   const tORB = totalFor('orb'), tDRB = totalFor('drb');
-  const tAST = totalFor('ast'), tSTL = totalFor('stl'), tTO = totalFor('to');
+  const tAST = totalFor('ast'), tSTL = totalFor('stl'), tBLK = totalFor('blk'), tTO = totalFor('to'), tF = totalFor('f');
 
   function leader(fn) {
     let best = null, bestVal = -1;
@@ -358,7 +399,9 @@ function showSummary() {
       <td>${p.stats.orb + p.stats.drb}</td>
       <td>${p.stats.ast}</td>
       <td>${p.stats.stl}</td>
+      <td>${p.stats.blk}</td>
       <td>${p.stats.to}</td>
+      <td>${p.stats.f}</td>
       <td class="highlight">${calcPts(p.stats)}</td>
     </tr>`;
   }).join('');
@@ -366,7 +409,7 @@ function showSummary() {
   screen.innerHTML = `
     <div class="summary-header">
       <h2>Final Box Score</h2>
-      <p>Game time: ${fmt(gameElapsed)}</p>
+      <p>${document.getElementById('oppInput').value.trim() ? 'vs ' + document.getElementById('oppInput').value.trim() + ' &nbsp;·&nbsp; ' : ''}Game time: ${fmt(gameElapsed)}</p>
     </div>
     <div class="summary-section">
       <h3>Game Leaders</h3>
@@ -381,7 +424,7 @@ function showSummary() {
       <h3>Player Stats</h3>
       <div class="summary-table-wrap">
         <table class="summary-table">
-          <thead><tr><th>Player</th><th>Time</th><th>FG</th><th>3PT</th><th>FT</th><th>Reb</th><th>Ast</th><th>Stl</th><th>TO</th><th>PTS</th></tr></thead>
+          <thead><tr><th>Player</th><th>Time</th><th>FG</th><th>3PT</th><th>FT</th><th>Reb</th><th>Ast</th><th>Stl</th><th>Blks</th><th>TO</th><th>F</th><th>PTS</th></tr></thead>
           <tbody>${playerRows}</tbody>
           <tfoot><tr class="tot-row">
             <td>Team</td>
@@ -389,7 +432,7 @@ function showSummary() {
             <td>${tFG}/${tFGA} <span style="font-size:10px;color:#aaa">${pct(tFG,tFGA)}</span></td>
             <td>${t3}/${t3A} <span style="font-size:10px;color:#aaa">${pct(t3,t3A)}</span></td>
             <td>${tFT}/${tFTA} <span style="font-size:10px;color:#aaa">${pct(tFT,tFTA)}</span></td>
-            <td>${tORB+tDRB}</td><td>${tAST}</td><td>${tSTL}</td><td>${tTO}</td>
+            <td>${tORB+tDRB}</td><td>${tAST}</td><td>${tSTL}</td><td>${tBLK}</td><td>${tTO}</td><td>${tF}</td>
             <td class="highlight">${totalPts}</td>
           </tr></tfoot>
         </table>
@@ -412,6 +455,7 @@ function newGame() {
   document.getElementById('clockBtn').textContent = 'Start';
   document.getElementById('clockBtn').className = 'btn-start';
   document.getElementById('endBtn').disabled = true;
+  document.getElementById('oppInput').value = '';
   updateUndoBtn();
   renderTable();
 }
@@ -432,16 +476,29 @@ function resetAll() {
 function refreshRow(p) {
   const row = document.getElementById('row-' + p.id);
   if (!row) { renderTable(); return; }
-  row.className = p.inGame ? 'active-row' : '';
+  row.className = p.inGame ? 'active-row' : 'bench-row';
   const cb = row.querySelector('.in-checkbox');
   if (cb) cb.checked = p.inGame;
   COLS.forEach(c => {
     const cell = document.getElementById('stat-' + p.id + '-' + c.key);
-    if (cell) cell.querySelector('.stat-val').textContent = p.stats[c.key];
+    if (!cell) return;
+    let val = p.stats[c.key];
+    if (c.key === 'fga')  val = p.stats.fg  + p.stats.fga;
+    if (c.key === '3pta') val = p.stats['3pt'] + p.stats['3pta'];
+    if (c.key === 'fta')  val = p.stats.ft  + p.stats.fta;
+    cell.querySelector('.stat-val').textContent = val;
   });
   const ptsEl = document.getElementById('pts-' + p.id);
   if (ptsEl) ptsEl.textContent = calcPts(p.stats);
-  COLS.forEach(c => { const tf = document.getElementById('tot-' + c.key); if (tf) tf.textContent = totalFor(c.key); });
+  COLS.forEach(c => {
+    const tf = document.getElementById('tot-' + c.key);
+    if (!tf) return;
+    let val = totalFor(c.key);
+    if (c.key === 'fga')  val = totalFor('fg')  + totalFor('fga');
+    if (c.key === '3pta') val = totalFor('3pt') + totalFor('3pta');
+    if (c.key === 'fta')  val = totalFor('ft')  + totalFor('fta');
+    tf.textContent = val;
+  });
   const tpts = document.getElementById('tot-pts');
   if (tpts) tpts.textContent = players.reduce((s,p) => s + calcPts(p.stats), 0);
 }
@@ -452,27 +509,40 @@ function renderTable() {
   if (players.length === 0) { area.innerHTML = ''; empty.style.display = 'block'; return; }
   empty.style.display = 'none';
   const headers = COLS.map(c => `<th>${c.label.replace('\n','<br>')}</th>`).join('');
-  const rows = players.map(p => {
+  const sorted = [...players.filter(p => p.inGame), ...players.filter(p => !p.inGame)];
+  const rows = sorted.map(p => {
     let ms = p.timeElapsed;
     if (p.inGame && p.timeStart) ms += Date.now() - p.timeStart;
-    const cells = COLS.map(c => `
-      <td class="stat-cell" id="stat-${p.id}-${c.key}" onclick="tapStat(${p.id},'${c.key}')">
-        <div class="stat-val">${p.stats[c.key]}</div>
+    const cells = COLS.map(c => {
+      let val = p.stats[c.key];
+      if (c.key === 'fga')  val = p.stats.fg  + p.stats.fga;
+      if (c.key === '3pta') val = p.stats['3pt'] + p.stats['3pta'];
+      if (c.key === 'fta')  val = p.stats.ft  + p.stats.fta;
+      return `
+      <td class="stat-cell${p.inGame ? '' : ' bench-stat'}" id="stat-${p.id}-${c.key}" onclick="tapStat(${p.id},'${c.key}')">
+        <div class="stat-val">${val}</div>
         ${c.note ? `<div class="stat-note">${c.note}</div>` : ''}
-      </td>`).join('');
-    return `<tr id="row-${p.id}" class="${p.inGame ? 'active-row' : ''}">
+      </td>`;
+    }).join('');
+    return `<tr id="row-${p.id}" class="${p.inGame ? 'active-row' : 'bench-row'}">
       <td>
         <div class="name-cell">
           <input type="checkbox" class="in-checkbox" ${p.inGame ? 'checked' : ''} onchange="toggleIn(${p.id})" />
-          <span class="name-text" title="${p.name}">${p.name}</span>
+          <span class="name-text${p.inGame ? ' name-active' : ''}" title="${p.name}">${p.name}</span>
         </div>
         <div class="time-cell" id="time-${p.id}">${fmt(ms)}</div>
       </td>
       ${cells}
-      <td class="pts-cell" id="pts-${p.id}">${calcPts(p.stats)}</td>
+      <td class="pts-cell${p.inGame ? '' : ' bench-pts'}" id="pts-${p.id}">${calcPts(p.stats)}</td>
     </tr>`;
   }).join('');
-  const totCells = COLS.map(c => `<td id="tot-${c.key}">${totalFor(c.key)}</td>`).join('');
+  const totCells = COLS.map(c => {
+    let val = totalFor(c.key);
+    if (c.key === 'fga')  val = totalFor('fg')    + totalFor('fga');
+    if (c.key === '3pta') val = totalFor('3pt')   + totalFor('3pta');
+    if (c.key === 'fta')  val = totalFor('ft')    + totalFor('fta');
+    return `<td id="tot-${c.key}">${val}</td>`;
+  }).join('');
   const totPts   = players.reduce((s,p) => s + calcPts(p.stats), 0);
   area.innerHTML = `
     <div class="table-wrap">
