@@ -327,8 +327,7 @@ function downloadCSV() {
     const tpAtt = p.stats['3pt'] + p.stats['3pta'];
     const ftAtt = p.stats.ft  + p.stats.fta;
     return [
-      p.name,
-      fmt(p.timeElapsed),
+      p.name, fmt(p.timeElapsed),
       p.stats.fg, fgAtt, pct(p.stats.fg, fgAtt),
       p.stats['3pt'], tpAtt, pct(p.stats['3pt'], tpAtt),
       p.stats.ft, ftAtt, pct(p.stats.ft, ftAtt),
@@ -337,7 +336,6 @@ function downloadCSV() {
       calcPts(p.stats)
     ].join(',');
   });
-
   const tFG  = totalFor('fg'),  tFGA = totalFor('fg') + totalFor('fga');
   const t3   = totalFor('3pt'), t3A  = totalFor('3pt') + totalFor('3pta');
   const tFT  = totalFor('ft'),  tFTA = totalFor('ft') + totalFor('fta');
@@ -345,37 +343,29 @@ function downloadCSV() {
   const tPTS = players.reduce((s,p) => s + calcPts(p.stats), 0);
   const totRow = [
     'TEAM TOTALS', fmt(gameElapsed),
-    tFG, tFGA, pct(tFG,tFGA),
-    t3,  t3A,  pct(t3,t3A),
-    tFT, tFTA, pct(tFT,tFTA),
+    tFG, tFGA, pct(tFG,tFGA), t3, t3A, pct(t3,t3A), tFT, tFTA, pct(tFT,tFTA),
     tORB, tDRB, tORB+tDRB,
     totalFor('ast'), totalFor('stl'), totalFor('blk'), totalFor('to'), totalFor('f'), tPTS
   ].join(',');
-
   const csv  = [headers.join(','), ...rows, totRow].join('\n');
   const blob = new Blob([csv], { type:'text/csv' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url;
-  a.download = 'basketball-stats-' + date + '.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  a.href = url; a.download = 'basketball-stats-' + date + '.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 function showSummary() {
   document.getElementById('gameScreen').style.display = 'none';
   const screen = document.getElementById('summaryScreen');
   screen.style.display = 'block';
-
   const totalPts = players.reduce((s,p) => s + calcPts(p.stats), 0);
   const tFG  = totalFor('fg'),  tFGA = totalFor('fg') + totalFor('fga');
   const t3   = totalFor('3pt'), t3A  = totalFor('3pt') + totalFor('3pta');
   const tFT  = totalFor('ft'),  tFTA = totalFor('ft') + totalFor('fta');
   const tORB = totalFor('orb'), tDRB = totalFor('drb');
   const tAST = totalFor('ast'), tSTL = totalFor('stl'), tBLK = totalFor('blk'), tTO = totalFor('to'), tF = totalFor('f');
-
   function leader(fn) {
     let best = null, bestVal = -1;
     players.forEach(p => { const v = fn(p); if (v > bestVal) { bestVal = v; best = p; } });
@@ -385,27 +375,20 @@ function showSummary() {
   const lReb = leader(p => p.stats.orb + p.stats.drb);
   const lAst = leader(p => p.stats.ast);
   const lStl = leader(p => p.stats.stl);
-
   const playerRows = players.map(p => {
     const fgAtt = p.stats.fg + p.stats.fga;
     const tpAtt = p.stats['3pt'] + p.stats['3pta'];
     const ftAtt = p.stats.ft + p.stats.fta;
     return `<tr>
-      <td>${p.name}</td>
-      <td>${fmt(p.timeElapsed)}</td>
+      <td>${p.name}</td><td>${fmt(p.timeElapsed)}</td>
       <td>${p.stats.fg}/${fgAtt} <span style="color:#aaa;font-size:10px">${pct(p.stats.fg,fgAtt)}</span></td>
       <td>${p.stats['3pt']}/${tpAtt} <span style="color:#aaa;font-size:10px">${pct(p.stats['3pt'],tpAtt)}</span></td>
       <td>${p.stats.ft}/${ftAtt} <span style="color:#aaa;font-size:10px">${pct(p.stats.ft,ftAtt)}</span></td>
-      <td>${p.stats.orb + p.stats.drb}</td>
-      <td>${p.stats.ast}</td>
-      <td>${p.stats.stl}</td>
-      <td>${p.stats.blk}</td>
-      <td>${p.stats.to}</td>
-      <td>${p.stats.f}</td>
+      <td>${p.stats.orb + p.stats.drb}</td><td>${p.stats.ast}</td><td>${p.stats.stl}</td>
+      <td>${p.stats.blk}</td><td>${p.stats.to}</td><td>${p.stats.f}</td>
       <td class="highlight">${calcPts(p.stats)}</td>
     </tr>`;
   }).join('');
-
   screen.innerHTML = `
     <div class="summary-header">
       <h2>Final Box Score</h2>
@@ -427,8 +410,7 @@ function showSummary() {
           <thead><tr><th>Player</th><th>Time</th><th>FG</th><th>3PT</th><th>FT</th><th>Reb</th><th>Ast</th><th>Stl</th><th>Blks</th><th>TO</th><th>F</th><th>PTS</th></tr></thead>
           <tbody>${playerRows}</tbody>
           <tfoot><tr class="tot-row">
-            <td>Team</td>
-            <td>${fmt(gameElapsed)}</td>
+            <td>Team</td><td>${fmt(gameElapsed)}</td>
             <td>${tFG}/${tFGA} <span style="font-size:10px;color:#aaa">${pct(tFG,tFGA)}</span></td>
             <td>${t3}/${t3A} <span style="font-size:10px;color:#aaa">${pct(t3,t3A)}</span></td>
             <td>${tFT}/${tFTA} <span style="font-size:10px;color:#aaa">${pct(tFT,tFTA)}</span></td>
@@ -538,12 +520,12 @@ function renderTable() {
   }).join('');
   const totCells = COLS.map(c => {
     let val = totalFor(c.key);
-    if (c.key === 'fga')  val = totalFor('fg')    + totalFor('fga');
-    if (c.key === '3pta') val = totalFor('3pt')   + totalFor('3pta');
-    if (c.key === 'fta')  val = totalFor('ft')    + totalFor('fta');
+    if (c.key === 'fga')  val = totalFor('fg')  + totalFor('fga');
+    if (c.key === '3pta') val = totalFor('3pt') + totalFor('3pta');
+    if (c.key === 'fta')  val = totalFor('ft')  + totalFor('fta');
     return `<td id="tot-${c.key}">${val}</td>`;
   }).join('');
-  const totPts   = players.reduce((s,p) => s + calcPts(p.stats), 0);
+  const totPts = players.reduce((s,p) => s + calcPts(p.stats), 0);
   area.innerHTML = `
     <div class="table-wrap">
       <table>
