@@ -108,6 +108,25 @@
   .highlight { color: #1a6b3c; font-weight: 700; }
   .btn-new-game { display: block; width: 100%; margin-top: 10px; padding: 14px; background: #1a6b3c; color: #fff; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: center; cursor: pointer; border: none; font-family: inherit; }
   .btn-csv { display: block; width: 100%; margin-top: 10px; padding: 14px; background: #1a4a7f; color: #fff; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: center; cursor: pointer; border: none; font-family: inherit; }
+  .btn-email { display: block; width: 100%; margin-top: 10px; padding: 14px; background: #5a2d82; color: #fff; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: center; cursor: pointer; border: none; font-family: inherit; }
+  .btn-history-top { background: #444; color: #fff; }
+
+  #historyScreen { display: none; }
+  .history-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; background: #fff; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .history-header h2 { font-size: 18px; font-weight: 700; flex: 1; }
+  .history-empty { color: #aaa; font-size: 13px; text-align: center; padding: 40px 16px; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .game-card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 10px; overflow: hidden; }
+  .game-card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; }
+  .game-card-header:active { background: #f5f5f5; }
+  .game-card-title { font-size: 15px; font-weight: 600; color: #111; }
+  .game-card-meta { font-size: 11px; color: #888; margin-top: 2px; }
+  .game-card-pts { font-size: 22px; font-weight: 700; color: #1a6b3c; }
+  .game-card-chevron { font-size: 16px; color: #ccc; transition: transform 0.2s; }
+  .game-card-chevron.open { transform: rotate(90deg); }
+  .game-card-body { display: none; border-top: 1px solid #f0f0f0; }
+  .game-card-body.open { display: block; }
+  .game-card-body .summary-table-wrap { border-radius: 0; box-shadow: none; }
+  .game-card-delete { font-size: 11px; color: #a32d2d; background: none; border: none; padding: 10px 14px; cursor: pointer; display: block; width: 100%; text-align: right; border-top: 1px solid #f5f5f5; font-family: inherit; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -128,6 +147,7 @@
         <button class="btn-start" id="clockBtn" onclick="toggleClock()">Start</button>
         <button class="btn-end" id="endBtn" onclick="promptEndGame()" disabled>End Game</button>
         <button class="btn-reset" onclick="promptReset()">Reset</button>
+        <button class="btn-history-top" onclick="showHistory()">📋 History</button>
       </div>
     </div>
 
@@ -152,6 +172,7 @@
   </div>
 
   <div id="summaryScreen"></div>
+  <div id="historyScreen"></div>
   <div class="max-alert" id="maxAlert">Only 5 players can be on the court</div>
 </div>
 
@@ -316,6 +337,8 @@ function endGame() {
     p.inGame = false;
   });
   downloadCSV();
+  saveGameToHistory();
+  openEmailDraft();
   showSummary();
 }
 
@@ -362,6 +385,64 @@ function downloadCSV() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function openEmailDraft() {
+  const opponent = document.getElementById('oppInput').value.trim() || 'Unknown Opponent';
+  const date = new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+  const totalPts = players.reduce((s,p) => s + calcPts(p.stats), 0);
+
+  const tFG  = totalFor('fg'),  tFGA = totalFor('fg') + totalFor('fga');
+  const t3   = totalFor('3pt'), t3A  = totalFor('3pt') + totalFor('3pta');
+  const tFT  = totalFor('ft'),  tFTA = totalFor('ft') + totalFor('fta');
+
+  const subject = encodeURIComponent(`Basketball Stats – vs ${opponent} – ${date}`);
+
+  // Build plain-text box score for email body
+  const divider = '-----------------------------';
+  const col = (s, w) => String(s).padEnd(w);
+
+  let body = `Game Stats – vs ${opponent}\n${date}  |  Game time: ${fmt(gameElapsed)}  |  Team pts: ${totalPts}\n\n`;
+  body += `${divider}\nTEAM TOTALS\n${divider}\n`;
+  body += `FG:  ${tFG}/${tFGA} (${pct(tFG,tFGA)})\n`;
+  body += `3PT: ${t3}/${t3A} (${pct(t3,t3A)})\n`;
+  body += `FT:  ${tFT}/${tFTA} (${pct(tFT,tFTA)})\n`;
+  body += `AST: ${totalFor('ast')}  |  REB: ${totalFor('orb')+totalFor('drb')}  |  STL: ${totalFor('stl')}  |  BLK: ${totalFor('blk')}  |  TO: ${totalFor('to')}\n\n`;
+
+  body += `${divider}\nPLAYER STATS\n${divider}\n`;
+  body += `${col('Player',12)} ${col('PTS',4)} ${col('FG',7)} ${col('3PT',7)} ${col('FT',7)} ${col('Reb',4)} ${col('Ast',4)} ${col('Stl',4)} ${col('Blk',4)} ${col('TO',4)} ${col('F',3)}\n`;
+
+  const sorted = [...players].sort((a,b) => calcPts(b.stats) - calcPts(a.stats));
+  sorted.forEach(p => {
+    const fgAtt = p.stats.fg + p.stats.fga;
+    const tpAtt = p.stats['3pt'] + p.stats['3pta'];
+    const ftAtt = p.stats.ft + p.stats.fta;
+    body += `${col(p.name,12)} ${col(calcPts(p.stats),4)} ${col(p.stats.fg+'/'+fgAtt,7)} ${col(p.stats['3pt']+'/'+tpAtt,7)} ${col(p.stats.ft+'/'+ftAtt,7)} ${col(p.stats.orb+p.stats.drb,4)} ${col(p.stats.ast,4)} ${col(p.stats.stl,4)} ${col(p.stats.blk,4)} ${col(p.stats.to,4)} ${col(p.stats.f,3)}\n`;
+  });
+
+  body += `\n(Full CSV stats file attached separately)`;
+
+  const mailto = `mailto:?subject=${subject}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailto;
+}
+
+function saveGameToHistory() {
+  const opponent = document.getElementById('oppInput').value.trim();
+  const game = {
+    id: Date.now(),
+    date: new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }),
+    opponent: opponent || 'Unknown Opponent',
+    duration: gameElapsed,
+    totalPts: players.reduce((s,p) => s + calcPts(p.stats), 0),
+    players: players.map(p => ({
+      name: p.name,
+      timeElapsed: p.timeElapsed,
+      stats: { ...p.stats }
+    }))
+  };
+  const saved = JSON.parse(localStorage.getItem('bbGames') || '[]');
+  saved.unshift(game);
+  localStorage.setItem('bbGames', JSON.stringify(saved));
 }
 
 function showSummary() {
@@ -439,6 +520,8 @@ function showSummary() {
       </div>
     </div>
     <button class="btn-csv" onclick="downloadCSV()">⬇ Download CSV Again</button>
+    <button class="btn-email" onclick="openEmailDraft()">✉️ Open Email Draft</button>
+    <button class="btn-history-top" style="display:block;width:100%;margin-top:10px;padding:14px;border-radius:12px;font-size:15px;font-weight:600;text-align:center;cursor:pointer;font-family:inherit;" onclick="showHistory()">📋 View Game History</button>
     <button class="btn-new-game" onclick="newGame()">Start New Game</button>`;
 }
 
@@ -552,6 +635,83 @@ function renderTable() {
         <tfoot><tr><td>Totals</td>${totCells}<td class="pts-cell" id="tot-pts">${totPts}</td></tr></tfoot>
       </table>
     </div>`;
+}
+
+// ── Game History ─────────────────────────────────────────────
+function showHistory() {
+  document.getElementById('gameScreen').style.display = 'none';
+  document.getElementById('summaryScreen').style.display = 'none';
+  document.getElementById('historyScreen').style.display = 'block';
+  renderHistory();
+}
+
+function hideHistory() {
+  document.getElementById('historyScreen').style.display = 'none';
+  document.getElementById('gameScreen').style.display = 'block';
+}
+
+function deleteGame(id) {
+  const saved = JSON.parse(localStorage.getItem('bbGames') || '[]');
+  localStorage.setItem('bbGames', JSON.stringify(saved.filter(g => g.id !== id)));
+  renderHistory();
+}
+
+function toggleGameCard(id) {
+  document.getElementById('gc-body-' + id).classList.toggle('open');
+  document.getElementById('gc-chev-' + id).classList.toggle('open');
+}
+
+function renderHistory() {
+  const screen = document.getElementById('historyScreen');
+  const saved = JSON.parse(localStorage.getItem('bbGames') || '[]');
+  let cardsHtml = '';
+  if (saved.length === 0) {
+    cardsHtml = '<div class="history-empty">No saved games yet.<br>Games save automatically when you tap "End Game".</div>';
+  } else {
+    cardsHtml = saved.map(g => {
+      const playerRows = g.players.map(p => {
+        const fgAtt = p.stats.fg + p.stats.fga;
+        const tpAtt = p.stats['3pt'] + p.stats['3pta'];
+        const ftAtt = p.stats.ft + p.stats.fta;
+        return `<tr>
+          <td>${p.name}</td><td>${fmt(p.timeElapsed)}</td>
+          <td>${p.stats.fg}/${fgAtt} <span style="color:#aaa;font-size:10px">${pct(p.stats.fg,fgAtt)}</span></td>
+          <td>${p.stats['3pt']}/${tpAtt} <span style="color:#aaa;font-size:10px">${pct(p.stats['3pt'],tpAtt)}</span></td>
+          <td>${p.stats.ft}/${ftAtt} <span style="color:#aaa;font-size:10px">${pct(p.stats.ft,ftAtt)}</span></td>
+          <td>${p.stats.orb+p.stats.drb}</td><td>${p.stats.ast}</td><td>${p.stats.stl}</td>
+          <td>${p.stats.blk}</td><td>${p.stats.to}</td><td>${p.stats.f}</td>
+          <td class="highlight">${calcPts(p.stats)}</td>
+        </tr>`;
+      }).join('');
+      return `<div class="game-card">
+        <div class="game-card-header" onclick="toggleGameCard(${g.id})">
+          <div>
+            <div class="game-card-title">vs ${g.opponent}</div>
+            <div class="game-card-meta">${g.date} &nbsp;·&nbsp; ${fmt(g.duration)}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="game-card-pts">${g.totalPts} pts</div>
+            <div class="game-card-chevron" id="gc-chev-${g.id}">›</div>
+          </div>
+        </div>
+        <div class="game-card-body" id="gc-body-${g.id}">
+          <div class="summary-table-wrap">
+            <table class="summary-table">
+              <thead><tr><th>Player</th><th>Time</th><th>FG</th><th>3PT</th><th>FT</th><th>Reb</th><th>Ast</th><th>Stl</th><th>Blks</th><th>TO</th><th>F</th><th>PTS</th></tr></thead>
+              <tbody>${playerRows}</tbody>
+            </table>
+          </div>
+          <button class="game-card-delete" onclick="deleteGame(${g.id})">🗑 Delete this game</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  screen.innerHTML = `
+    <div class="history-header">
+      <h2>📋 Game History</h2>
+      <button class="btn-reset" onclick="hideHistory()">← Back</button>
+    </div>
+    ${cardsHtml}`;
 }
 
 renderTable();
